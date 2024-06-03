@@ -35,8 +35,8 @@ export interface Schedule {
 
 export interface Appointment {
     id?: string;
-    doctor: string;
-    user: string;
+    doctor_id: string;
+    user_id: string;
     schedule: string;
     description: string;
     deleted_at?: string;
