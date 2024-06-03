@@ -1,77 +1,88 @@
 "use client";
 
+import React, {useEffect, useState} from "react";
 import { z } from 'zod';
-import { Navbar } from "@/components/navbar";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { medicos, pacientes } from "@/proxystates";
+import { useSnapshot } from "valtio";
 import {Textarea} from "@/components/ui/textarea";
+import {getMedicoSchedules} from "@/requests/medico";
+import {requestFailed} from "@/utils";
+import {Schedule} from "@/types";
+import moment from 'moment'
+import {createAppointment} from "@/requests/appointment";
+import {toast} from "@/components/ui/use-toast";
+
+import { Button } from "@/components/ui/button"
 
 const consultaSchema = z.object({
-    medicoId: z.number({
+    doctor: z.string({
         required_error: 'Selecione um medico',
     }),
-    pacienteId: z.number({
+    user: z.string({
         required_error: 'Selecione um paciente',
     }),
-    data: z.string({
-        required_error: 'Selecione uma data',
+    schedule: z.string({
+        required_error: 'Selecione um horário',
     }),
-    horario: z.string({
-        required_error: 'Selecione um horario',
-    }),
-    motivo: z.string({
+    description: z.string({
         required_error: 'Descreva o motivo',
     }),
 })
-
-const medicos = [
-    {
-        id: 1,
-        name: 'Dr. Fulano',
-        days: [
-            {name: "Segunda", schedules: ['08:00', '09:00', '10:00']},
-            {name: "Terça", schedules: ['08:00', '09:00', '10:00']},
-            {name: "Quarta", schedules: ['08:00', '09:00', '10:00']},
-            {name: "Quinta", schedules: ['08:00', '09:00', '10:00']},
-            {name: "Sexta", schedules: ['08:00', '09:00', '10:00']},
-        ]},
-    { id: 2, name: 'Dr. Cicrano', days: [
-        {name: "Segunda", schedules: ['08:00', '09:00', '10:00']},
-        {name: "Terça", schedules: ['08:00', '09:00', '10:00']},
-        {name: "Quarta", schedules: ['08:00', '09:00', '10:00']},
-        {name: "Quinta", schedules: ['08:00', '09:00', '10:00']},
-        {name: "Sexta", schedules: ['08:00', '09:00', '10:00']},
-        ] },
-];
-
-const pacientes = [
-    { id: 1, name: 'Paciente Fulano' },
-    { id: 2, name: 'Paciente Cicrano' },
-    { id: 3, name: 'Paciente Beltrano' },
-];
 
 type FormData = z.infer<typeof consultaSchema>;
 
 const ConsultaCreate = () => {
 
+    const snapMedicos = useSnapshot(medicos);
+    const snapPacientes = useSnapshot(pacientes);
+
+    const [doctorSchedules, setDoctorSchedules] = React.useState<Schedule[]>([]);
+    const [doctorSelected, setDoctorSelected] = useState('');
+
+    console.log(doctorSchedules)
+
     const form = useForm<FormData>({
-        resolver: zodResolver(consultaSchema),
+        resolver: zodResolver(consultaSchema)
     });
 
-    const onSubmit = (data: FormData) => {
-        console.log(data);
+    const onSubmit = async (data: FormData) => {
+        try {
+            await createAppointment(data)
+            toast({
+                title: 'Consulta criada',
+                description: 'Sua consulta foi criada com sucesso',
+            })
+        } catch (error) {
+            requestFailed(error)
+        }
     };
 
-    const medicoSelectedId : number = form.getValues("medicoId")
-    const medicoSelected = medicos.filter((medico)=> medico.id === medicoSelectedId)
+    const handleDoctorChange = (value: string) => {
+        form.setValue('doctor', value);
+        setDoctorSelected(value);
+    }
+
+    const updateSchedule = async () =>{
+        try {
+            const schedules = await getMedicoSchedules(form.getValues('doctor'))
+            setDoctorSchedules(schedules.data.schedules)
+        }catch (error) {
+            requestFailed(error)
+        }
+    }
+
+    useEffect(() => {
+        if (doctorSelected) {
+            updateSchedule()
+        }
+    }, [doctorSelected]);
 
     return (
         <div className={'overflow-x-hidden'}>
-            <Navbar />
             <div className="flex w-screen h-full justify-center ">
                 <Form {...form}>
                     <form className="flex flex-col w-[700px] p-7 rounded justify-between gap-3"
@@ -79,21 +90,18 @@ const ConsultaCreate = () => {
                         <div className="flex flex-col gap-2 w-full">
                             <p className="text-3xl font-bold">Cadastro de consulta</p>
 
-                            <FormField name="medicoId" control={form.control} render={({ field }) => (
-                                <FormItem>
+                            <FormField control={form.control} name={'doctor'} render={({ field }) => (
+                                <FormItem className={'w-full'}>
                                     <FormLabel>Médico</FormLabel>
                                     <FormControl>
-                                        <Select
-                                            onValueChange={(value) => field.onChange(Number(value))}
-                                            defaultValue=""
-                                        >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue placeholder="Selecione o Médico"/>
+                                        <Select onValueChange={(value) => handleDoctorChange(value)} value={field.value}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Selecione um médico" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {medicos.map((medico) => (
+                                                {snapMedicos?.data.map((medico) => (
                                                     <SelectItem key={medico.id} value={String(medico.id)}>
-                                                        {medico.name}
+                                                        {medico.name} {medico.surname} ({medico.specialty})
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
@@ -103,21 +111,18 @@ const ConsultaCreate = () => {
                                 </FormItem>
                             )} />
 
-                            <FormField name="pacienteId" control={form.control} render={({ field }) => (
-                                <FormItem>
+                            <FormField control={form.control} name={'user'} render={({ field }) => (
+                                <FormItem className={'w-full'}>
                                     <FormLabel>Paciente</FormLabel>
                                     <FormControl>
-                                        <Select
-                                            onValueChange={(value) => field.onChange(Number(value))}
-                                            defaultValue=""
-                                        >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue placeholder="Selecione o Paciente" />
+                                        <Select onValueChange={field.onChange} value={field.value}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Selecione um paciente" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {pacientes.map((paciente) => (
+                                                {snapPacientes?.data.map((paciente) => (
                                                     <SelectItem key={paciente.id} value={String(paciente.id)}>
-                                                        {paciente.name}
+                                                        {paciente.name} {paciente.surname}
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
@@ -127,19 +132,23 @@ const ConsultaCreate = () => {
                                 </FormItem>
                             )} />
 
-                            <FormField name="data" control={form.control} render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Data da consulta</FormLabel>
+
+                            <FormField control={form.control} name={'schedule'} render={({ field }) => (
+                                <FormItem className={'w-full'}>
+                                    <FormLabel>Horário</FormLabel>
                                     <FormControl>
-                                        <Select
-                                            disabled={!medicoSelectedId}
-                                            onValueChange={(value : string) => field.onChange(Number(value))}
-                                            defaultValue=""
-                                        >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue placeholder="Selecione o Horário" />
+                                        <Select disabled={!doctorSelected} onValueChange={field.onChange} value={field.value}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Selecione um horário" />
                                             </SelectTrigger>
                                             <SelectContent>
+                                                {
+                                                    doctorSchedules?.map((schedule) => (
+                                                        <SelectItem key={schedule.id} value={String(schedule.id)}>
+                                                            {moment(schedule.start).format('DD/MM HH:mm')} - {moment(schedule.end).format('DD/MM HH:mm')}
+                                                        </SelectItem>
+                                                    ))
+                                                }
                                             </SelectContent>
                                         </Select>
                                     </FormControl>
@@ -147,25 +156,15 @@ const ConsultaCreate = () => {
                                 </FormItem>
                             )} />
 
-                            <FormField name="horario" control={form.control} render={({ field }) => (
+                            <FormField control={form.control} name={'description'} render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Horário da consulta</FormLabel>
+                                    <FormLabel>Descricão</FormLabel>
                                     <FormControl>
-                                        <Input type="time" {...field} />
+                                        <Textarea {...field} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
-                            )} />
-
-                            <FormField name="motivo" control={form.control} render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Motivo da consulta</FormLabel>
-                                    <FormControl>
-                                        <Textarea placeholder="Motivo da consulta" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
+                            )}/>
 
                         </div>
                         <Button type="submit" variant="default">Cadastrar</Button>

@@ -49,9 +49,9 @@ export const Navbar = () => {
 
     return (
         <div className={'flex justify-between items-center px-5 h-16 border-b'}>
-            <p className={'text-xl font-bold'}>
+            <a href={'/'} className={'text-xl font-bold'}>
                 Consultas
-            </p>
+            </a>
 
             <Menubar>
                 {routes.map((route : Routes, index : number) => (
